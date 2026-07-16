@@ -52,7 +52,7 @@ export default function AdminDestinationsPage() {
   };
 
   const removeDestination = async (id: string) => {
-    if (!confirm('Supprimer cette destination ? Les offres liées seront aussi supprimées si la contrainte SQL cascade est active.')) return;
+    if (!confirm('Supprimer cette destination ? Les offres liées seront aussi supprimées!!.')) return;
     try {
       await deleteDestination(id);
       setDestinations(destinations.filter((d) => d.id !== id));
