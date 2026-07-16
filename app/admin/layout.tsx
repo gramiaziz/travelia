@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   Globe, LayoutDashboard, MapPin, Package, ClipboardList,
-  MessageSquare, Menu, X, LogOut, ChevronRight
+  MessageSquare, Menu, X, LogOut, ChevronRight, Loader2
 } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
 const navItems = [
   { href: '/admin/dashboard', label: 'Tableau de bord', icon: LayoutDashboard },
@@ -18,13 +19,76 @@ const navItems = [
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userEmail, setUserEmail] = useState('');
   const pathname = usePathname();
+  const router = useRouter();
 
-  if (pathname === '/admin') return <>{children}</>;
+  const isLoginPage = pathname === '/admin';
+
+  useEffect(() => {
+    if (isLoginPage) return;
+
+    let active = true;
+
+    async function validateSession() {
+      const { data, error } = await supabase.auth.getUser();
+      const user = data.user;
+
+      if (!active) return;
+
+      if (error || !user) {
+        setIsAuthenticated(false);
+        router.replace('/admin');
+        return;
+      }
+
+      setUserEmail(user.email ?? 'Administrateur');
+      setIsAuthenticated(true);
+    }
+
+    void validateSession();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session?.user) {
+        setIsAuthenticated(false);
+        setUserEmail('');
+        router.replace('/admin');
+        return;
+      }
+
+      setUserEmail(session.user.email ?? 'Administrateur');
+      setIsAuthenticated(true);
+    });
+
+    return () => {
+      active = false;
+      authListener.subscription.unsubscribe();
+    };
+  }, [isLoginPage, router]);
+
+  const handleLogout = async () => {
+    setIsAuthenticated(false);
+    await supabase.auth.signOut();
+    router.replace('/admin');
+    router.refresh();
+  };
+
+  if (isLoginPage) return <>{children}</>;
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="flex items-center gap-3 text-gray-600">
+          <Loader2 className="w-5 h-5 animate-spin" />
+          <span className="text-sm font-medium">Vérification de la session...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-100 flex">
-      {/* Sidebar */}
       <aside
         className={`fixed inset-y-0 left-0 z-50 w-64 bg-gray-900 flex flex-col transform transition-transform duration-300 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
@@ -67,17 +131,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <Globe className="w-5 h-5" />
             Voir le site
           </Link>
-          <Link
-            href="/admin"
-            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-400 hover:bg-red-900/40 hover:text-red-400 transition-all"
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-400 hover:bg-red-900/40 hover:text-red-400 transition-all"
           >
             <LogOut className="w-5 h-5" />
             Déconnexion
-          </Link>
+          </button>
         </div>
       </aside>
 
-      {/* Mobile overlay */}
       {sidebarOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/50 lg:hidden"
@@ -85,13 +149,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         />
       )}
 
-      {/* Main */}
       <div className="flex-1 lg:ml-64 flex flex-col min-h-screen">
-        {/* Top bar */}
         <header className="bg-white border-b border-gray-200 px-4 sm:px-6 py-4 flex items-center justify-between sticky top-0 z-30">
           <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
+            onClick={() => setSidebarOpen((current) => !current)}
             className="lg:hidden p-2 rounded-lg text-gray-500 hover:bg-gray-100"
+            aria-label="Ouvrir le menu"
           >
             {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
@@ -99,7 +162,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
               <span className="text-white text-xs font-bold">A</span>
             </div>
-            <span className="text-sm font-medium text-gray-700 hidden sm:block">Administrateur</span>
+            <span className="text-sm font-medium text-gray-700 hidden sm:block">
+              {userEmail || 'Administrateur'}
+            </span>
           </div>
         </header>
 

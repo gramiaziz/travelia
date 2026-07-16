@@ -1,28 +1,65 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Globe, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Globe, Lock, Eye, EyeOff, ArrowRight, Loader2 } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
 export default function AdminLoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    let active = true;
+
+    async function redirectAuthenticatedUser() {
+      const { data } = await supabase.auth.getUser();
+
+      if (active && data.user) {
+        router.replace('/admin/dashboard');
+      }
+    }
+
+    void redirectAuthenticatedUser();
+
+    return () => {
+      active = false;
+    };
+  }, [router]);
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (email === 'admin@travelia.tn' && password === 'admin123') {
-      window.location.href = '/admin/dashboard';
-    } else {
-      setError('Email ou mot de passe incorrect. (admin@travelia.tn / admin123)');
+    setError('');
+    setIsSubmitting(true);
+
+    try {
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+
+      if (signInError) {
+        setError('Email ou mot de passe incorrect.');
+        return;
+      }
+
+      router.replace('/admin/dashboard');
+      router.refresh();
+    } catch {
+      setError('Une erreur est survenue. Veuillez réessayer.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-900 via-blue-800 to-blue-700 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        {/* Logo */}
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center gap-3">
             <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-lg">
@@ -30,10 +67,9 @@ export default function AdminLoginPage() {
             </div>
             <span className="text-2xl font-bold text-white">Travelia</span>
           </Link>
-          <p className="text-blue-200 text-sm mt-3">Panneau d'administration</p>
+          <p className="text-blue-200 text-sm mt-3">Panneau d&apos;administration</p>
         </div>
 
-        {/* Card */}
         <div className="bg-white rounded-3xl p-8 shadow-2xl">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
@@ -46,49 +82,73 @@ export default function AdminLoginPage() {
           </div>
 
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3 mb-5">
+            <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3 mb-5" role="alert">
               {error}
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
+              <label htmlFor="admin-email" className="block text-sm font-medium text-gray-700 mb-1.5">
+                Email
+              </label>
               <input
+                id="admin-email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="admin@travelia.tn"
+                autoComplete="email"
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
+                disabled={isSubmitting}
               />
             </div>
+
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Mot de passe</label>
+              <label htmlFor="admin-password" className="block text-sm font-medium text-gray-700 mb-1.5">
+                Mot de passe
+              </label>
               <div className="relative">
                 <input
+                  id="admin-password"
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
+                  autoComplete="current-password"
                   className="w-full px-4 py-3 pr-12 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
+                  disabled={isSubmitting}
                 />
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
+                  onClick={() => setShowPassword((current) => !current)}
                   className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                  disabled={isSubmitting}
                 >
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
             </div>
+
             <button
               type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3.5 rounded-xl transition-colors flex items-center justify-center gap-2"
+              disabled={isSubmitting}
+              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed text-white font-semibold py-3.5 rounded-xl transition-colors flex items-center justify-center gap-2"
             >
-              Se connecter
-              <ArrowRight className="w-4 h-4" />
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Connexion...
+                </>
+              ) : (
+                <>
+                  Se connecter
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
             </button>
           </form>
 
